@@ -59,7 +59,7 @@ The Excel file must contain the following columns (headers are case-sensitive):
 
 ## Extracted Descriptors
 
-The script extracts and calculates the following descriptors for both Cation (Prefix: `SM-`) and Salt (Prefix: `CM-`) structures:
+The script extracts and calculates the following descriptors:
 
 ### Electronic & Reactivity
 * **Energies:** HOMO, LUMO, HOMO-LUMO Gap.

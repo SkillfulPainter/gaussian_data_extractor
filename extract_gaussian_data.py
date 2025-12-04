@@ -1,10 +1,12 @@
 import os
 import re
 import csv
-from morfeus import Sterimol, read_gjf
 import pandas as pd
 import statsmodels.api as sm
 import numpy as np
+import matplotlib.pyplot as plt  # Added missing import
+from morfeus import Sterimol, read_gjf
+
 
 def extract_data(filepath):
     """
@@ -13,31 +15,31 @@ def extract_data(filepath):
     Each extraction block is protected independently to ensure a single failure doesn't affect others.
     """
     # Initialize all potential values to None with descriptions
-    total_energy = None       # Total SCF Energy
-    homo = None               # Highest Occupied Molecular Orbital Energy
-    lumo = None               # Lowest Unoccupied Molecular Orbital Energy
-    dipole_moment = None      # Dipole Moment (Debye)
-    gap = None                # HOMO-LUMO Gap
-    eta = None                # Chemical Hardness
-    sigma = None              # Chemical Softness
-    mu = None                 # Chemical Potential
-    chi = None                # Electronegativity
-    omega = None              # Electrophilicity Index
-    zpe = None                # Zero-point Energy Correction
-    e_thermal_corr = None     # Thermal Correction to Energy
-    h_corr = None             # Thermal Correction to Enthalpy
-    g_corr = None             # Thermal Correction to Gibbs Free Energy
-    e_plus_zpe = None         # Sum of electronic and zero-point Energies
-    e_plus_e_thermal = None   # Sum of electronic and thermal Energies
-    e_plus_h = None           # Sum of electronic and thermal Enthalpies
-    e_plus_g = None           # Sum of electronic and thermal Free Energies
-    lowest_freq = None        # Lowest Vibrational Frequency
-    ke = None                 # Kinetic Energy
-    e_n = None                # Electron-Nuclear Attraction Energy
-    n_n = None                # Nuclear Repulsion Energy
-    mol_mass = None           # Molecular Mass
-    cv = None                 # Constant Volume Heat Capacity
-    entropy = None            # Entropy
+    total_energy = None  # Total SCF Energy
+    homo = None  # Highest Occupied Molecular Orbital Energy
+    lumo = None  # Lowest Unoccupied Molecular Orbital Energy
+    dipole_moment = None  # Dipole Moment (Debye)
+    gap = None  # HOMO-LUMO Gap
+    eta = None  # Chemical Hardness
+    sigma = None  # Chemical Softness
+    mu = None  # Chemical Potential
+    chi = None  # Electronegativity
+    omega = None  # Electrophilicity Index
+    zpe = None  # Zero-point Energy Correction
+    e_thermal_corr = None  # Thermal Correction to Energy
+    h_corr = None  # Thermal Correction to Enthalpy
+    g_corr = None  # Thermal Correction to Gibbs Free Energy
+    e_plus_zpe = None  # Sum of electronic and zero-point Energies
+    e_plus_e_thermal = None  # Sum of electronic and thermal Energies
+    e_plus_h = None  # Sum of electronic and thermal Enthalpies
+    e_plus_g = None  # Sum of electronic and thermal Free Energies
+    lowest_freq = None  # Lowest Vibrational Frequency
+    ke = None  # Kinetic Energy
+    e_n = None  # Electron-Nuclear Attraction Energy
+    n_n = None  # Nuclear Repulsion Energy
+    mol_mass = None  # Molecular Mass
+    cv = None  # Constant Volume Heat Capacity
+    entropy = None  # Entropy
 
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -51,6 +53,7 @@ def extract_data(filepath):
 
     # --- Extract Total Energy (SCF Done) ---
     try:
+        # Regex matches: SCF Done:  E(RB3LYP) =  -1234.56789012
         scf_matches = re.findall(r'SCF Done:.*?=\s*(-?\d+\.\d+)', content)
         if scf_matches:
             total_energy = float(scf_matches[-1])
@@ -62,6 +65,7 @@ def extract_data(filepath):
         dipole_section_start = content.rfind('Dipole moment (field-independent basis, Debye):')
         if dipole_section_start != -1:
             search_area = content[dipole_section_start:]
+            # Regex matches: Tot=    1.2345
             tot_match = re.search(r'Tot=\s*(-?\d+\.\d+)', search_area)
             if tot_match:
                 dipole_moment = float(tot_match.group(1))
@@ -70,6 +74,7 @@ def extract_data(filepath):
 
     # --- Extract HOMO and LUMO ---
     try:
+        # Regex matches: SCF Done:
         scf_matches = list(re.finditer(r'SCF Done:', content))
 
         for i in range(len(scf_matches) - 1, -1, -1):
@@ -82,22 +87,24 @@ def extract_data(filepath):
 
             search_area = content[start_pos:end_pos]
 
+            # Regex matches: Alpha  occ. eigenvalues --  -10.12345  -0.67890
             occ_eigenvalues = re.findall(r'Alpha  occ\. eigenvalues --\s*(.*)', search_area)
 
             if occ_eigenvalues:
                 all_occ_energies = []
                 for line in occ_eigenvalues:
-                    # Regex extraction handles cases like "-100.0-100.0" perfectly
+                    # Regex matches individual numbers: -10.12345 or 0.67890
                     vals = re.findall(r'-?\d+\.\d+', line)
                     all_occ_energies.extend([float(e) for e in vals])
                 if all_occ_energies:
                     homo = all_occ_energies[-1]
 
+            # Regex matches: Alpha virt. eigenvalues --   0.12345   1.67890
             virt_eigenvalues = re.findall(r'Alpha virt\. eigenvalues --\s*(.*)', search_area)
             if virt_eigenvalues:
                 all_virt_energies = []
                 for line in virt_eigenvalues:
-                    # Regex extraction for virtual orbitals
+                    # Regex matches individual numbers: 0.12345 or 1.67890
                     vals = re.findall(r'-?\d+\.\d+', line)
                     all_virt_energies.extend([float(e) for e in vals])
                 if all_virt_energies:
@@ -113,22 +120,19 @@ def extract_data(filepath):
     # (Gap, Hardness, Softness, Chemical Potential, Electronegativity, Electrophilicity Index)
     try:
         if homo is not None and lumo is not None:
-            # 8. Gap
+            # Gap
             gap = lumo - homo
-
-            # 21. Chemical Hardness (Eta)
+            # Chemical Hardness (Eta)
             eta = gap / 2.0
-
-            # 35. Chemical Potential (Mu)
+            # Chemical Potential (Mu)
             mu = (homo + lumo) / 2.0
-
-            # 34. Electronegativity (Chi) (Based on Koopmans' theorem, Chi = -Mu)
+            # Electronegativity (Chi) (Based on Koopmans' theorem, Chi = -Mu)
             chi = -mu
 
             if eta != 0:
-                # 22. Chemical Softness (Sigma)
+                # Chemical Softness (Sigma)
                 sigma = 1.0 / eta
-                # 23. Electrophilicity Index (Omega)
+                # Electrophilicity Index (Omega)
                 omega = (mu ** 2) / (2.0 * eta)
 
     except Exception as e:
@@ -137,8 +141,8 @@ def extract_data(filepath):
 
     # --- Extract KE, E-N, N-N ---
     try:
-        # Matches patterns like: N-N= 4.379D+02 E-N=-1.749D+03 KE= 3.791D+02
         # Gaussian uses 'D' for scientific notation
+        # Regex matches: N-N= 4.379D+02 E-N=-1.749D+03 KE= 3.791D+02
         energy_comp_matches = re.findall(r'N-N=\s*([\d.D+-]+)\s+E-N=\s*([\d.D+-]+)\s+KE=\s*([\d.D+-]+)', content)
         if energy_comp_matches:
             last_match = energy_comp_matches[-1]
@@ -152,6 +156,7 @@ def extract_data(filepath):
 
     # --- Extract Molecular Mass ---
     try:
+        # Regex matches: Molecular mass:   180.12345 amu
         mass_match = re.search(r'Molecular mass:\s*([\d.]+)\s+amu', content)
         if mass_match:
             mol_mass = float(mass_match.group(1))
@@ -168,6 +173,7 @@ def extract_data(filepath):
         if freq_start_idx != -1:
             search_area = content[freq_start_idx:]
 
+        # Regex matches: Frequencies --    100.1234    200.5678    300.9101
         freq_matches = re.findall(r'Frequencies --\s+(.*)', search_area)
 
         if freq_matches:
@@ -193,49 +199,57 @@ def extract_data(filepath):
         thermo_start = content.rfind("- Thermochemistry -")
         if thermo_start != -1:
             thermo_area = content[thermo_start:]
-            # Match Total line: Total     116.278     32.687     94.388
             # Columns: E (Thermal) KCal/Mol, CV Cal/Mol-Kelvin, S Cal/Mol-Kelvin
+            # Regex matches: Total     116.278     32.687     94.388
             total_match = re.search(r'Total\s+\d+\.\d+\s+(\d+\.\d+)\s+(\d+\.\d+)', thermo_area)
             if total_match:
                 cv = float(total_match.group(1))
                 entropy = float(total_match.group(2))
 
-        # 14. ZPE
+        # ZPE
+        # Regex matches: Zero-point correction=                           0.123456
         zpe_match = re.findall(r'Zero-point correction=\s*(-?\d+\.\d+)', content)
         if zpe_match:
             zpe = float(zpe_match[-1])
 
         # Thermal correction to Energy
+        # Regex matches: Thermal correction to Energy=                    0.134567
         e_thermal_corr_match = re.findall(r'Thermal correction to Energy=\s*(-?\d+\.\d+)', content)
         if e_thermal_corr_match:
             e_thermal_corr = float(e_thermal_corr_match[-1])
 
-        # 15. Enthalpy(H) correction
+        # Enthalpy(H) correction
+        # Regex matches: Thermal correction to Enthalpy=                  0.135511
         h_corr_match = re.findall(r'Thermal correction to Enthalpy=\s*(-?\d+\.\d+)', content)
         if h_corr_match:
             h_corr = float(h_corr_match[-1])
 
-        # 16. G correction
+        # G correction
+        # Regex matches: Thermal correction to Gibbs Free Energy=         0.098765
         g_corr_match = re.findall(r'Thermal correction to Gibbs Free Energy=\s*(-?\d+\.\d+)', content)
         if g_corr_match:
             g_corr = float(g_corr_match[-1])
 
-        # 17. E + ZPE
+        # E + ZPE
+        # Regex matches: Sum of electronic and zero-point Energies=           -1234.123456
         e_plus_zpe_match = re.findall(r'Sum of electronic and zero-point Energies=\s*(-?\d+\.\d+)', content)
         if e_plus_zpe_match:
             e_plus_zpe = float(e_plus_zpe_match[-1])
 
-        # 18. E + E_thermal
+        # E + E_thermal
+        # Regex matches: Sum of electronic and thermal Energies=              -1234.112345
         e_plus_e_thermal_match = re.findall(r'Sum of electronic and thermal Energies=\s*(-?\d+\.\d+)', content)
         if e_plus_e_thermal_match:
             e_plus_e_thermal = float(e_plus_e_thermal_match[-1])
 
-        # 19. E+H
+        # E+H
+        # Regex matches: Sum of electronic and thermal Enthalpies=            -1234.111401
         e_plus_h_match = re.findall(r'Sum of electronic and thermal Enthalpies=\s*(-?\d+\.\d+)', content)
         if e_plus_h_match:
             e_plus_h = float(e_plus_h_match[-1])
 
-        # 20. E+G
+        # E+G
+        # Regex matches: Sum of electronic and thermal Free Energies=         -1234.148147
         e_plus_g_match = re.findall(r'Sum of electronic and thermal Free Energies=\s*(-?\d+\.\d+)', content)
         if e_plus_g_match:
             e_plus_g = float(e_plus_g_match[-1])
@@ -356,26 +370,28 @@ def load_data(data_folder, excel_filename="data.xlsx"):
 
 
 def calculate_sterimol(filepath, axis_atoms=(1, 6)):
-    elements, coordinates = read_gjf(filepath)
-    sterimol = Sterimol(elements, coordinates, axis_atoms[0], axis_atoms[1])
-    L = sterimol.L_value
-    B_1 = sterimol.B_1_value
-    B_5 = sterimol.B_5_value
-    return {"L": L, "B_1": B_1, "B_5": B_5}
+    """
+    Calculates Sterimol parameters using the morfeus library.
+    Requires a .gjf file with geometries.
+    """
+    try:
+        elements, coordinates = read_gjf(filepath)
+        sterimol = Sterimol(elements, coordinates, axis_atoms[0], axis_atoms[1])
+        L = sterimol.L_value
+        B_1 = sterimol.B_1_value
+        B_5 = sterimol.B_5_value
+        return {"L": L, "B_1": B_1, "B_5": B_5}
+    except Exception as e:
+        print(f"Sterimol Calculation Failed for {filepath}: {e}")
+        return {"L": None, "B_1": None, "B_5": None}
 
 
 def main():
     """
     Main function to process files, extract data, and generate CSV report.
-    Also performs Multivariate Linear Regression.
     """
-    data_folder = r"D:\Path\To\Gaussian\Files"
+    data_folder = r"D:\Research\GaussianData"
     output_file = 'results.csv'
-
-    # --- Anion Energy ---
-    anion_energy = -459.54813049
-    # --- DME Solvent Energy ---
-    E_DME_SOLVENT = -308.71907112
 
     all_fitting_data = []
 
@@ -383,356 +399,255 @@ def main():
     if not os.path.isdir(data_folder):
         print(f"Error: Folder '{data_folder}' does not exist.")
         return
+
+    # Load configurations
     sterimol_config = load_sterimol_config(data_folder)
     data_map = load_data(data_folder)
 
-    # Find all unique calculation numbers n
-    file_numbers = set()
-    for filename in os.listdir(data_folder):
-        match = re.match(r'(\d+)-(cation|salt)\.log', filename)
-        if match:
-            file_numbers.add(int(match.group(1)))
-
-    if not file_numbers:
-        print(f"No files matching format n-cation.log or n-salt.log found in '{data_folder}'.")
-        return
-
     # Prepare to write CSV file
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-        # Define CSV Headers
         fieldnames = [
             'number',
+            'filename',
             'dependent variable',
-            'anion', 'cation', 'salt', 'delta-E (au)', 'DME-Min-Complex-E', 'DME-Min-ΔE (au)',
-            # SM block
-            'SM-HOMO', 'SM-LUMO', 'SM-Gap',
-            'SM-Eta (Hardness)', 'SM-Sigma (Softness)',
-            'SM-Mu (Potential)', 'SM-Chi (Electronegativity)',
-            'SM-Omega (Electrophilicity)',
-            'SM-Dipole Moment(deby)',
-            'SM-ZPE', 'SM-E_thermal_corr', 'SM-H_corr', 'SM-G_corr',
-            'SM-E+ZPE', 'SM-E+E_thermal', 'SM-E+H', 'SM-E+G', 'SM-LowestFreq',
-            'SM-KE', 'SM-E-N', 'SM-N-N', 'SM-Mass(amu)', 'SM-CV', 'SM-S',
-            'SM-Sterimol-L', 'SM-Sterimol-B_1', 'SM-Sterimol-B_5',
-
-            # CM block
-            'CM-HOMO', 'CM-LUMO', 'CM-Gap',
-            'CM-Eta (Hardness)', 'CM-Sigma (Softness)',
-            'CM-Mu (Potential)', 'CM-Chi (Electronegativity)',
-            'CM-Omega (Electrophilicity)',
-            'CM-Dipole Moment(deby)',
-            'CM-ZPE', 'CM-E_thermal_corr', 'CM-H_corr', 'CM-G_corr',
-            'CM-E+ZPE', 'CM-E+E_thermal', 'CM-E+H', 'CM-E+G', 'CM-LowestFreq',
-            'CM-KE', 'CM-E-N', 'CM-N-N', 'CM-Mass(amu)', 'CM-CV', 'CM-S',
+            'Total Energy',
+            'HOMO', 'LUMO', 'Gap',
+            'Eta (Hardness)', 'Sigma (Softness)',
+            'Mu (Potential)', 'Chi (Electronegativity)',
+            'Omega (Electrophilicity)',
+            'Dipole Moment(debye)',
+            'ZPE', 'E_thermal_corr', 'H_corr', 'G_corr',
+            'E+ZPE', 'E+E_thermal', 'E+H', 'E+G', 'LowestFreq',
+            'KE', 'E-N', 'N-N', 'Mass(amu)', 'CV', 'S',
+            'Sterimol-L', 'Sterimol-B_1', 'Sterimol-B_5'
         ]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
-        print(f"Starting file processing, found {len(file_numbers)} groups...")
+        print("Starting general file processing...")
 
-        # Process each number
-        for n in sorted(list(file_numbers)):
-            print(f"Processing group {n}...")
-            cation_filepath = os.path.join(data_folder, f'{n}-cation.log')
-            salt_filepath = os.path.join(data_folder, f'{n}-salt.log')
-            cation_gjf_filepath = os.path.join(data_folder, f'{n}-cation.gjf')
+        # Scan folder for all log files matching pattern "n-something.log"
+        files_found = 0
+        for filename in os.listdir(data_folder):
+            # Regex matches: 1-cation.log (Group 1: 1, Group 2: cation)
+            match = re.match(r'^(\d+)-(.+)\.log$', filename)
+            if not match:
+                continue
 
-            cation_data = extract_data(cation_filepath)
-            salt_data = extract_data(salt_filepath)
+            n = int(match.group(1))
+            file_desc = match.group(2)  # e.g., 'cation', 'salt', 'DME-M1'
+            filepath = os.path.join(data_folder, filename)
+
+            print(f"Processing file: {filename} (Number: {n})")
+
+            # Extract Quantum Data
+            qm_data = extract_data(filepath)
+
+            if not qm_data or qm_data['total_energy'] is None:
+                print(f"Skipping {filename} due to extraction failure.")
+                continue
+
+            # Handle Sterimol (requires .gjf file with same name)
+            gjf_filename = filename.replace('.log', '.gjf')
+            gjf_filepath = os.path.join(data_folder, gjf_filename)
+
+            sterimol_data = {"L": None, "B_1": None, "B_5": None}
             axis_atoms = sterimol_config.get(n)
-            try:
-                if axis_atoms:
-                    cation_sterimol = calculate_sterimol(cation_gjf_filepath, axis_atoms)
-            except Exception as e:
-                print(e)
-                cation_sterimol = {"L": None, "B_1": None, "B_5": None}
 
-            # If any file read fails, skip this group
-            if not cation_data or not salt_data:
-                print(f"Skipping group {n} due to missing files or read errors.")
-                continue
+            # Only calculate sterimol if config exists and .gjf exists
+            if axis_atoms and os.path.exists(gjf_filepath):
+                sterimol_data = calculate_sterimol(gjf_filepath, axis_atoms)
 
-            delta_e_au = None
-            if cation_data['total_energy'] is not None and salt_data['total_energy'] is not None:
-                delta_e_au = salt_data['total_energy'] - cation_data['total_energy'] - anion_energy
-
-            dme_results = {}  # Temporary storage for DME data
-
-            # 1. Find all DME files corresponding to current number n
-            dme_files = []
-            for filename in os.listdir(data_folder):
-                # Match filename format: n-DME-M(index)....log
-                match = re.match(rf'{n}-DME-M(\d+)\.\d+\.node1\.log', filename)
-                if match:
-                    m_index = int(match.group(1))
-                    dme_files.append((m_index, filename))
-
-            # Get dependent_variable
-            current_cation_energy = cation_data['total_energy']
+            # Get dependent variable
             dependent_variable = data_map.get(n, None)
-            if current_cond is None:
-                print(f"Number {n} missing conductivity data, skipping sample.")
-                continue
-
-            min_dme_e = None  # Record minimum total energy
-            min_dme_delta_au = None  # Record corresponding binding energy
-
-            if dme_files and current_cation_energy is not None:
-                for dme_filename in dme_files:
-                    dme_filepath = os.path.join(data_folder, dme_filename[1])
-
-                    # Extract data
-                    dme_data_extracted = extract_data(dme_filepath)
-
-                    if dme_data_extracted and dme_data_extracted['total_energy'] is not None:
-                        e_total = dme_data_extracted['total_energy']
-
-                        # Compare to find minimum
-                        if min_dme_e is None or e_total < min_dme_e:
-                            min_dme_e = e_total
-
-                # Calculate binding energy after finding minimum
-                if min_dme_e is not None:
-                    # Formula: ΔE = E_complex_min - E_solvent - E_cation
-                    min_dme_delta_au = min_dme_e - E_DME_SOLVENT - current_cation_energy
-
-            # 3. Store in dictionary
-            dme_results['DME-Min-Complex-E'] = min_dme_e
-            dme_results['DME-Min-ΔE (au)'] = min_dme_delta_au
 
             # --- Organize Data Row ---
             row_data = {
                 'number': n,
+                'filename': filename,
                 'dependent variable': dependent_variable,
-                'anion': anion_energy,
-                'cation': cation_data['total_energy'],
-                'salt': salt_data['total_energy'],
-                'delta-E (au)': delta_e_au,
-
-                # --- SM data fill ---
-                'SM-HOMO': cation_data['homo'],
-                'SM-LUMO': cation_data['lumo'],
-                'SM-Gap': cation_data['gap'],
-                'SM-Eta (Hardness)': cation_data['eta'],
-                'SM-Sigma (Softness)': cation_data['sigma'],
-                'SM-Mu (Potential)': cation_data['mu'],
-                'SM-Chi (Electronegativity)': cation_data['chi'],
-                'SM-Omega (Electrophilicity)': cation_data['omega'],
-                'SM-Dipole Moment(deby)': cation_data['dipole_moment'],
-                'SM-ZPE': cation_data['zpe'],
-                'SM-E_thermal_corr': cation_data['e_thermal_corr'],
-                'SM-H_corr': cation_data['h_corr'],
-                'SM-G_corr': cation_data['g_corr'],
-                'SM-E+ZPE': cation_data['e_plus_zpe'],
-                'SM-E+E_thermal': cation_data['e_plus_e_thermal'],
-                'SM-E+H': cation_data['e_plus_h'],
-                'SM-E+G': cation_data['e_plus_g'],
-                'SM-LowestFreq': cation_data['LowestFreq'],
-                'SM-KE': cation_data['KE'],
-                'SM-E-N': cation_data['E-N'],
-                'SM-N-N': cation_data['N-N'],
-                'SM-Mass(amu)': cation_data['MolMass'],
-                'SM-CV': cation_data['CV'],
-                'SM-S': cation_data['S'],
-                'SM-Sterimol-L': cation_sterimol["L"],
-                'SM-Sterimol-B_1': cation_sterimol["B_1"],
-                'SM-Sterimol-B_5': cation_sterimol["B_5"],
-
-                # --- CM data fill ---
-                'CM-HOMO': salt_data['homo'],
-                'CM-LUMO': salt_data['lumo'],
-                'CM-Gap': salt_data['gap'],
-                'CM-Eta (Hardness)': salt_data['eta'],
-                'CM-Sigma (Softness)': salt_data['sigma'],
-                'CM-Mu (Potential)': salt_data['mu'],
-                'CM-Chi (Electronegativity)': salt_data['chi'],
-                'CM-Omega (Electrophilicity)': salt_data['omega'],
-                'CM-Dipole Moment(deby)': salt_data['dipole_moment'],
-                'CM-ZPE': salt_data['zpe'],
-                'CM-E_thermal_corr': salt_data['e_thermal_corr'],
-                'CM-H_corr': salt_data['h_corr'],
-                'CM-G_corr': salt_data['g_corr'],
-                'CM-E+ZPE': salt_data['e_plus_zpe'],
-                'CM-E+E_thermal': salt_data['e_plus_e_thermal'],
-                'CM-E+H': salt_data['e_plus_h'],
-                'CM-E+G': salt_data['e_plus_g'],
-                'CM-LowestFreq': salt_data['LowestFreq'],
-                'CM-KE': salt_data['KE'],
-                'CM-E-N': salt_data['E-N'],
-                'CM-N-N': salt_data['N-N'],
-                'CM-Mass(amu)': salt_data['MolMass'],
-                'CM-CV': salt_data['CV'],
-                'CM-S': salt_data['S'],
-                **dme_results
+                'Total Energy': qm_data['total_energy'],
+                'HOMO': qm_data['homo'],
+                'LUMO': qm_data['lumo'],
+                'Gap': qm_data['gap'],
+                'Eta (Hardness)': qm_data['eta'],
+                'Sigma (Softness)': qm_data['sigma'],
+                'Mu (Potential)': qm_data['mu'],
+                'Chi (Electronegativity)': qm_data['chi'],
+                'Omega (Electrophilicity)': qm_data['omega'],
+                'Dipole Moment(debye)': qm_data['dipole_moment'],
+                'ZPE': qm_data['zpe'],
+                'E_thermal_corr': qm_data['e_thermal_corr'],
+                'H_corr': qm_data['h_corr'],
+                'G_corr': qm_data['g_corr'],
+                'E+ZPE': qm_data['e_plus_zpe'],
+                'E+E_thermal': qm_data['e_plus_e_thermal'],
+                'E+H': qm_data['e_plus_h'],
+                'E+G': qm_data['e_plus_g'],
+                'LowestFreq': qm_data['LowestFreq'],
+                'KE': qm_data['KE'],
+                'E-N': qm_data['E-N'],
+                'N-N': qm_data['N-N'],
+                'Mass(amu)': qm_data['MolMass'],
+                'CV': qm_data['CV'],
+                'S': qm_data['S'],
+                'Sterimol-L': sterimol_data["L"],
+                'Sterimol-B_1': sterimol_data["B_1"],
+                'Sterimol-B_5': sterimol_data["B_5"],
             }
 
-            # Write to CSV
             writer.writerow(row_data)
-            all_fitting_data.append(row_data)
+
+            # Only add to fitting data if dependent variable exists
+            if dependent_variable is not None:
+                all_fitting_data.append(row_data)
+
+            files_found += 1
+
+        print(f"Processing complete. Processed {files_found} files.")
 
     # --- Multivariate Linear Fitting ---
     print("\n" + "=" * 30)
     print("Starting Multivariate Linear Fitting (Mode: backward)...")
 
     if not all_fitting_data:
-        print("No data available for fitting.")
+        print("No data available for fitting (check if 'dependent variable' is present).")
         return
 
     # Convert to DataFrame
     df_fit = pd.DataFrame(all_fitting_data)
-    df_fit.to_csv(output_file, index=False, encoding='utf-8-sig')
 
-    y_col = '30度电导率'
+    # Target column
+    y_col = 'dependent variable'
+
     if y_col not in df_fit.columns:
         print(f"Error: Target column '{y_col}' not found.")
         return
-    y = df_fit[y_col]
 
-    if 'cation' in df_fit.columns:
-        start_idx = df_fit.columns.get_loc('cation')
-        descriptor_cols = df_fit.columns[start_idx:]
-        X = df_fit[descriptor_cols]
+    # Drop filename and number for regression purposes
+    df_fit_numeric = df_fit.drop(columns=['filename', 'number'], errors='ignore')
 
-        # 1. Data Cleaning
-        X = X.apply(pd.to_numeric, errors='coerce')
-        X = X.dropna(axis=1, how='any')  # Remove columns with NaN values
-        X = X.loc[:, (X != X.iloc[0]).any()]  # Remove constant columns
+    # Handle missing values in dependent variable if any slipped through
+    df_fit_numeric = df_fit_numeric.dropna(subset=[y_col])
 
-        # Standardization - Important for regression to avoid scale bias
-        # Using simple (x - mean) / std
-        X_scaled = (X - X.mean()) / X.std()
+    y = df_fit_numeric[y_col]
+    X = df_fit_numeric.drop(columns=[y_col])
 
-        print(f"Sample count: {len(y)}, Available descriptors: {X.shape[1]}")
+    # 1. Data Cleaning
+    X = X.apply(pd.to_numeric, errors='coerce')
+    X = X.dropna(axis=1, how='any')  # Remove columns with NaN values
+    X = X.loc[:, (X != X.iloc[0]).any()]  # Remove constant columns
 
-        significance_level = 0.03
-        max_init = len(y) - 2
+    if X.empty:
+        print("No valid descriptor columns remaining after cleaning.")
+        return
 
-        # Initial Screening if variables exceed sample size
-        if X.shape[1] > max_init:
-            print(f"Too many variables, performing initial screening, keeping top {max_init}...")
-            corrs = X_scaled.apply(lambda x: x.corr(y, method='spearman')).abs().sort_values(ascending=False)
-            X_curr = X_scaled[corrs.index[:max_init]]
-        else:
-            X_curr = X_scaled.copy()
+    # Standardization
+    X_scaled = (X - X.mean()) / X.std()
 
-        curr_cols = X_curr.columns.tolist()
-        step = 1
-        while True:
-            if not curr_cols:
-                print("All descriptors removed, unable to build model.")
-                break
+    print(f"Sample count: {len(y)}, Available descriptors: {X.shape[1]}")
 
-            # Prepare data and add constant (intercept)
-            X_curr = X[curr_cols]
-            X_with_const = sm.add_constant(X_curr)
+    significance_level = 0.05
+    max_init = len(y) - 2
 
-            try:
-                # Fit model
-                model = sm.OLS(y, X_with_const).fit()
-            except Exception as e:
-                print(f"Fitting error: {e}")
-                break
-
-            # Get statistics
-            # drop('const') to avoid removing the intercept
-            p_values = model.pvalues.drop('const', errors='ignore')
-            t_values = model.tvalues.drop('const', errors='ignore')
-            coeffs = model.params.drop('const', errors='ignore')
-
-            # Create Contribution Table
-            contribution_df = pd.DataFrame({
-                'Feature': p_values.index,
-                'Coeff (Weight)': coeffs.values,
-                't-value (Strength)': t_values.values,
-                'P-value (Significance)': p_values.values
-            })
-            # Sort by P-value ascending (smaller P-value is better)
-            contribution_df.sort_values('P-value (Significance)', ascending=True, inplace=True)
-
-            print(f"\n--- Round {step} Fitting ---")
-            print(f"Current R-squared: {model.rsquared:.4f}")
-            print("Descriptor Contribution (Sorted by Significance, smaller P is better):")
-            # Format output
-            print(contribution_df.to_string(index=False, formatters={
-                'Coeff (Weight)': '{:.4e}'.format,
-                't-value (Strength)': '{:.4f}'.format,
-                'P-value (Significance)': '{:.4f}'.format
-            }))
-
-            # Find the "worst" variable (largest P-value)
-            if contribution_df.empty:
-                break
-
-            worst_row = contribution_df.iloc[-1]  # Last row has max P-value
-            worst_feature = worst_row['Feature']
-            worst_p = worst_row['P-value (Significance)']
-
-            # Decision: Remove if worst P-value > threshold
-            if worst_p > significance_level:
-                print(f"Decision: Removing descriptor '{worst_feature}' (Low contribution, P={worst_p:.4f} > {significance_level})")
-                curr_cols.remove(worst_feature)
-                step += 1
-            else:
-                print(f"\n[Fitting Complete] All remaining descriptors contribute significantly (P < {significance_level}).")
-                print("=" * 30)
-                print("Final Model Summary:")
-                print(model.summary())
-
-                # Save final report
-                report_file = 'fitting_report.txt'
-                with open(report_file, 'w', encoding='utf-8') as f:
-                    f.write(model.summary().as_text())
-                print(f"Final fitting report saved to: {report_file}")
-
-                if worst_p > significance_level:
-                    print(
-                        f"Decision: Removing descriptor '{worst_feature}' (Low contribution, P={worst_p:.4f} > {significance_level})")
-                    curr_cols.remove(worst_feature)
-                    step += 1
-                else:
-                    print(
-                        f"\n[Fitting Complete] All remaining descriptors contribute significantly (P < {significance_level}).")
-                    print("=" * 30)
-                    print("Final Model Summary:")
-                    print(model.summary())
-
-                    # Save final report
-                    report_file = 'fitting_report_final.txt'
-                    with open(report_file, 'w', encoding='utf-8') as f:
-                        f.write(model.summary().as_text())
-                    print(f"Final fitting report saved to: {report_file}")
-                    print("Generating prediction plot...")
-                    y_pred = model.predict(X_with_const)
-                    plt.figure(figsize=(6, 6))
-                    plt.scatter(y, y_pred, color='blue', alpha=0.6, edgecolors='k', label='Data Points')
-
-                    combined_min = min(y.min(), y_pred.min())
-                    combined_max = max(y.max(), y_pred.max())
-
-                    margin = (combined_max - combined_min) * 0.05
-                    plot_limit = [combined_min - margin, combined_max + margin]
-
-                    plt.plot(plot_limit, plot_limit, color='red', linestyle='--', linewidth=2,
-                             label='Perfect Fit (y=x)')
-
-                    plt.xlim(plot_limit)
-                    plt.ylim(plot_limit)
-                    plt.gca().set_aspect('equal', adjustable='box')
-
-                    plt.xlabel('Experimental Conductivity', fontsize=12)
-                    plt.ylabel('Predicted Conductivity', fontsize=12)
-                    plt.title(f'Experimental vs Predicted Conductivity\n$R^2 = {model.rsquared:.4f}$', fontsize=14)
-
-                    plt.legend()
-                    plt.grid(True, linestyle='--', alpha=0.5)
-
-                    plot_filename = 'prediction_vs_actual.png'
-                    plt.savefig(plot_filename, dpi=300, bbox_inches='tight')
-                    print(f"Prediction comparison plot saved to: {plot_filename}")
-                break
-
+    # Initial Screening if variables exceed sample size
+    if X.shape[1] > max_init and max_init > 0:
+        print(f"Too many variables, performing initial screening, keeping top {max_init}...")
+        corrs = X_scaled.apply(lambda x: x.corr(y, method='spearman')).abs().sort_values(ascending=False)
+        X_curr = X_scaled[corrs.index[:max_init]]
     else:
-        print("Column 'cation' not found, unable to determine descriptor range.")
+        X_curr = X_scaled.copy()
+
+    curr_cols = X_curr.columns.tolist()
+    step = 1
+
+    while True:
+        if not curr_cols:
+            print("All descriptors removed, unable to build model.")
+            break
+
+        # Prepare data and add constant (intercept)
+        X_curr = X[curr_cols]
+        X_with_const = sm.add_constant(X_curr)
+
+        try:
+            # Fit model
+            model = sm.OLS(y, X_with_const).fit()
+        except Exception as e:
+            print(f"Fitting error: {e}")
+            break
+
+        # Get statistics
+        p_values = model.pvalues.drop('const', errors='ignore')
+        t_values = model.tvalues.drop('const', errors='ignore')
+        coeffs = model.params.drop('const', errors='ignore')
+
+        # Create Contribution Table
+        contribution_df = pd.DataFrame({
+            'Feature': p_values.index,
+            'Coeff (Weight)': coeffs.values,
+            't-value (Strength)': t_values.values,
+            'P-value (Significance)': p_values.values
+        })
+        contribution_df.sort_values('P-value (Significance)', ascending=True, inplace=True)
+
+        print(f"\n--- Round {step} Fitting ---")
+        print(f"Current R-squared: {model.rsquared:.4f}")
+        print("Descriptor Contribution (Sorted by Significance, smaller P is better):")
+        # Format output
+        print(contribution_df.to_string(index=False, formatters={
+            'Coeff (Weight)': '{:.4e}'.format,
+            't-value (Strength)': '{:.4f}'.format,
+            'P-value (Significance)': '{:.4f}'.format
+        }))
+        # Find the "worst" variable
+        if contribution_df.empty:
+            break
+
+        worst_row = contribution_df.iloc[-1]
+        worst_feature = worst_row['Feature']
+        worst_p = worst_row['P-value (Significance)']
+
+        # Decision
+        if worst_p > significance_level:
+            print(f"Decision: Removing '{worst_feature}' (P={worst_p:.4f} > {significance_level})")
+            curr_cols.remove(worst_feature)
+            step += 1
+        else:
+            print(f"\n[Fitting Complete] All descriptors significant (P < {significance_level}).")
+            print("=" * 30)
+            print("Final Model Summary:")
+            print(model.summary())
+
+            # Save reports
+            with open('fitting_report.txt', 'w', encoding='utf-8') as f:
+                f.write(model.summary().as_text())
+
+            # Plotting
+            try:
+                print("Generating prediction plot...")
+                y_pred = model.predict(X_with_const)
+                plt.figure(figsize=(6, 6))
+                plt.scatter(y, y_pred, color='blue', alpha=0.6, edgecolors='k', label='Data Points')
+
+                combined_min = min(y.min(), y_pred.min())
+                combined_max = max(y.max(), y_pred.max())
+                margin = (combined_max - combined_min) * 0.05
+                plot_limit = [combined_min - margin, combined_max + margin]
+
+                plt.plot(plot_limit, plot_limit, color='red', linestyle='--', linewidth=2, label='Perfect Fit')
+                plt.xlim(plot_limit)
+                plt.ylim(plot_limit)
+                plt.xlabel('Experimental', fontsize=12)
+                plt.ylabel('Predicted', fontsize=12)
+                plt.title(f'Experimental vs Predicted\n$R^2 = {model.rsquared:.4f}$', fontsize=14)
+                plt.legend()
+                plt.grid(True, linestyle='--', alpha=0.5)
+                plt.savefig('prediction_vs_actual.png', dpi=300, bbox_inches='tight')
+                print("Plot saved.")
+            except Exception as e:
+                print(f"Error plotting: {e}")
+            break
 
     print("=" * 30 + "\n")
     print("Processing complete!")
