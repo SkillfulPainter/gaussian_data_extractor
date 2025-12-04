@@ -4,7 +4,7 @@ import csv
 from morfeus import Sterimol, read_gjf
 import pandas as pd
 import statsmodels.api as sm
-
+import numpy as np
 
 def extract_data(filepath):
     """
@@ -683,6 +683,52 @@ def main():
                 with open(report_file, 'w', encoding='utf-8') as f:
                     f.write(model.summary().as_text())
                 print(f"Final fitting report saved to: {report_file}")
+
+                if worst_p > significance_level:
+                    print(
+                        f"Decision: Removing descriptor '{worst_feature}' (Low contribution, P={worst_p:.4f} > {significance_level})")
+                    curr_cols.remove(worst_feature)
+                    step += 1
+                else:
+                    print(
+                        f"\n[Fitting Complete] All remaining descriptors contribute significantly (P < {significance_level}).")
+                    print("=" * 30)
+                    print("Final Model Summary:")
+                    print(model.summary())
+
+                    # Save final report
+                    report_file = 'fitting_report_final.txt'
+                    with open(report_file, 'w', encoding='utf-8') as f:
+                        f.write(model.summary().as_text())
+                    print(f"Final fitting report saved to: {report_file}")
+                    print("Generating prediction plot...")
+                    y_pred = model.predict(X_with_const)
+                    plt.figure(figsize=(6, 6))
+                    plt.scatter(y, y_pred, color='blue', alpha=0.6, edgecolors='k', label='Data Points')
+
+                    combined_min = min(y.min(), y_pred.min())
+                    combined_max = max(y.max(), y_pred.max())
+
+                    margin = (combined_max - combined_min) * 0.05
+                    plot_limit = [combined_min - margin, combined_max + margin]
+
+                    plt.plot(plot_limit, plot_limit, color='red', linestyle='--', linewidth=2,
+                             label='Perfect Fit (y=x)')
+
+                    plt.xlim(plot_limit)
+                    plt.ylim(plot_limit)
+                    plt.gca().set_aspect('equal', adjustable='box')
+
+                    plt.xlabel('Experimental Conductivity', fontsize=12)
+                    plt.ylabel('Predicted Conductivity', fontsize=12)
+                    plt.title(f'Experimental vs Predicted Conductivity\n$R^2 = {model.rsquared:.4f}$', fontsize=14)
+
+                    plt.legend()
+                    plt.grid(True, linestyle='--', alpha=0.5)
+
+                    plot_filename = 'prediction_vs_actual.png'
+                    plt.savefig(plot_filename, dpi=300, bbox_inches='tight')
+                    print(f"Prediction comparison plot saved to: {plot_filename}")
                 break
 
     else:
