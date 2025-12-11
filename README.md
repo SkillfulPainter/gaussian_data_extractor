@@ -30,23 +30,22 @@ The script relies on a strict file naming convention to associate files with a s
 ### 1. Gaussian Output Files
 Place all files in a single directory. Replace `n` with the sample number (e.g., `1`, `2`, `10`...):
 
-| File Type | Naming Pattern | Description |
-| :--- | :--- | :--- |
-| **Cation Optimization** | `n-cation.log` | Output log for the isolated cation. |
-| **Cation Input** | `n-cation.gjf` | Geometry file required for Sterimol calculation. |
+| File Type           | Naming Pattern | Description |
+|:--------------------|:---------------| :--- |
+| **Gaussian Output** | `n-**.log`     | Output log for the isolated cation. |
 
 ### 2. Configuration & Experimental Data (`data.xlsx`)
-You must provide an Excel file named **`data.xlsx`** in the same directory. This file serves two purposes: providing the experimental target variable (for regression) and configuration for steric calculations.
+You also need to provide an Excel file named **`data.xlsx`** in the same directory. This file serves two purposes: providing the experimental target variable (for regression) and configuration for steric calculations.
 
 #### **Required Data Format**
 
 The Excel file must contain the following columns (headers are case-sensitive):
 
-| Column Name | Description | Example |
-| :--- | :--- | :--- |
-| **`number`** | The Sample ID corresponding to `n` in filenames. | `1` |
-| **`dependent variable`** | The experimental value (target Y) to predict (e.g., Conductivity). | `5.4` |
-| **`sterimol axis atoms`** | Atom indices for Sterimol calculation, separated by a comma. | `1,6` |
+| Column Name | Description                                                                     | Example |
+| :--- |:--------------------------------------------------------------------------------| :--- |
+| **`number`** | The Sample ID corresponding to `n` in filenames.                                | `1` |
+| **`dependent variable`** | The experimental value (target Y) to predict.                                   | `5.4` |
+| **`sterimol axis atoms`** | Atom indices to define an axis for Sterimol calculations, separated by a comma. | `1,6` |
 
 **Example `data.xlsx` content:**
 
