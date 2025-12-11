@@ -3,7 +3,8 @@
 ## Overview
 This Python tool is designed to automate the extraction of quantum chemical descriptors from Gaussian calculation output files (`.log`) and perform subsequent multivariate statistical analysis. 
 
-It is specifically tailored for analyzing ionic liquid systems (Cation/Anion/Solvent interactions), extracting electronic, thermodynamic, and steric properties, and performing backward stepwise linear regression to model experimental properties (e.g., Conductivity).
+It is specifically tailored for analyzing DFT calculations of small organic molecules, extracting physical organic descriptors, and performing stepwise linear regression to model experimental properties.
+* The current version only contains the data extractor part. The QSAR modeling part will be uploaded in the future.
 
 ## Key Features
 * **Batch Extraction:** Automatically processes multiple molecules based on numerical indices found in filenames.
@@ -33,8 +34,6 @@ Place all files in a single directory. Replace `n` with the sample number (e.g.,
 | :--- | :--- | :--- |
 | **Cation Optimization** | `n-cation.log` | Output log for the isolated cation. |
 | **Cation Input** | `n-cation.gjf` | Geometry file required for Sterimol calculation. |
-| **Salt Optimization** | `n-salt.log` | Output log for the cation-anion salt complex. |
-| **Solvent Complex** | `n-DME-M*.log` | E.g., `1-DME-M1.200.node1.log`. Used to find the lowest energy solvent complex. |
 
 ### 2. Configuration & Experimental Data (`data.xlsx`)
 You must provide an Excel file named **`data.xlsx`** in the same directory. This file serves two purposes: providing the experimental target variable (for regression) and configuration for steric calculations.

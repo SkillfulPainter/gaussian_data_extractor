@@ -429,13 +429,12 @@ def main():
         # Scan folder for all log files matching pattern "n-something.log"
         files_found = 0
         for filename in os.listdir(data_folder):
-            # Regex matches: 1-cation.log (Group 1: 1, Group 2: cation)
+            # Regex matches: 1-*.log (Group 1: 1, Group 2: cation)
             match = re.match(r'^(\d+)-(.+)\.log$', filename)
             if not match:
                 continue
 
             n = int(match.group(1))
-            file_desc = match.group(2)  # e.g., 'cation', 'salt', 'DME-M1'
             filepath = os.path.join(data_folder, filename)
 
             print(f"Processing file: {filename} (Number: {n})")
