@@ -286,6 +286,98 @@ def extract_data(filepath):
         'S': entropy,
     }
 
+# Complete periodic table mapping (atomic number -> element symbol)
+PERIODIC_TABLE = {
+    1: 'H', 2: 'He', 3: 'Li', 4: 'Be', 5: 'B', 6: 'C', 7: 'N', 8: 'O', 9: 'F', 10: 'Ne',
+    11: 'Na', 12: 'Mg', 13: 'Al', 14: 'Si', 15: 'P', 16: 'S', 17: 'Cl', 18: 'Ar', 19: 'K', 20: 'Ca',
+    21: 'Sc', 22: 'Ti', 23: 'V', 24: 'Cr', 25: 'Mn', 26: 'Fe', 27: 'Co', 28: 'Ni', 29: 'Cu', 30: 'Zn',
+    31: 'Ga', 32: 'Ge', 33: 'As', 34: 'Se', 35: 'Br', 36: 'Kr', 37: 'Rb', 38: 'Sr', 39: 'Y', 40: 'Zr',
+    41: 'Nb', 42: 'Mo', 43: 'Tc', 44: 'Ru', 45: 'Rh', 46: 'Pd', 47: 'Ag', 48: 'Cd', 49: 'In', 50: 'Sn',
+    51: 'Sb', 52: 'Te', 53: 'I', 54: 'Xe', 55: 'Cs', 56: 'Ba', 74: 'W', 79: 'Au', 80: 'Hg', 82: 'Pb'
+}
+
+
+def extract_geometry_from_log(filepath):
+    """
+    Extracts the geometric coordinates of the last optimized structure from a Gaussian log file.
+    Prioritizes 'Standard orientation', uses 'Input orientation' if not found.
+    Returns: (elements, coordinates)
+    elements: List of atomic symbols (numpy array)
+    coordinates: List of coordinates (numpy array)
+    """
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except Exception as e:
+        print(f"Error reading file for geometry extraction {filepath}: {e}")
+        return None, None
+
+    # Find all Orientation blocks. We take the last one appearing in the file.
+    matches = list(re.finditer(r'(Standard|Input) orientation:', content))
+
+    if not matches:
+        print(f"Warning: No geometry orientation found in {filepath}")
+        return None, None
+
+    # Take the last match (usually the final optimized structure)
+    last_match = matches[-1]
+    start_pos = last_match.end()
+
+    # Find the separator line where data starts
+    # Format is usually:
+    # ---------------------------------------------------------------------
+    # Center     Atomic      Atomic             Coordinates (Angstroms)
+    # Number     Number       Type             X           Y           Z
+    # ---------------------------------------------------------------------
+    #      1          6           0        1.458998    1.620285    0.186410
+
+    # Find the first separator line starting from start_pos
+    header_line_start = content.find('---------------------------------------------------------------------', start_pos)
+    if header_line_start == -1:
+        return None, None
+
+    # Find the second separator line (header ends, data starts)
+    data_start_idx = content.find('---------------------------------------------------------------------',
+                                  header_line_start + 1)
+    if data_start_idx == -1:
+        return None, None
+
+    data_start_idx += len('---------------------------------------------------------------------')
+
+    # Find the third separator line (data ends)
+    data_end_idx = content.find('---------------------------------------------------------------------', data_start_idx)
+
+    if data_end_idx == -1:
+        return None, None
+
+    # Extract data block
+    data_block = content[data_start_idx:data_end_idx].strip()
+    lines = data_block.split('\n')
+
+    elements = []
+    coordinates = []
+
+    for line in lines:
+        parts = line.split()
+        # Typical line has 6 columns: Center# Atomic# Type X Y Z
+        if len(parts) < 6:
+            continue
+
+        try:
+            atomic_num = int(parts[1])
+            x = float(parts[3])
+            y = float(parts[4])
+            z = float(parts[5])
+
+            # Convert atomic number to symbol
+            symbol = PERIODIC_TABLE.get(atomic_num, 'X')
+
+            elements.append(symbol)
+            coordinates.append([x, y, z])
+        except ValueError:
+            continue
+
+    return np.array(elements), np.array(coordinates)
 
 def load_sterimol_config(data_folder, excel_filename="data.xlsx"):
     """
@@ -369,20 +461,23 @@ def load_data(data_folder, excel_filename="data.xlsx"):
     return cond_map
 
 
-def calculate_sterimol(filepath, axis_atoms=(1, 6)):
+def calculate_sterimol(elements, coordinates, axis_atoms=(1, 6)):
     """
     Calculates Sterimol parameters using the morfeus library.
-    Requires a .gjf file with geometries.
+    Requires elements and coordinates extracted from the log file.
     """
     try:
-        elements, coordinates = read_gjf(filepath)
+        print(f"Calculating Sterimol with axis atoms: {axis_atoms}")
+        print(f"Elements: {elements}")
+        print(f"Coordinates: {coordinates}")
+
         sterimol = Sterimol(elements, coordinates, axis_atoms[0], axis_atoms[1])
         L = sterimol.L_value
         B_1 = sterimol.B_1_value
         B_5 = sterimol.B_5_value
         return {"L": L, "B_1": B_1, "B_5": B_5}
     except Exception as e:
-        print(f"Sterimol Calculation Failed for {filepath}: {e}")
+        print(f"Sterimol Calculation Failed: {e}")
         return {"L": None, "B_1": None, "B_5": None}
 
 
@@ -390,7 +485,7 @@ def main():
     """
     Main function to process files, extract data, and generate CSV report.
     """
-    data_folder = r"D:\Research\GaussianData"
+    data_folder = r"/examples"
     output_file = 'results.csv'
 
     all_fitting_data = []
@@ -446,18 +541,16 @@ def main():
                 print(f"Skipping {filename} due to extraction failure.")
                 continue
 
-            # Handle Sterimol (requires .gjf file with same name)
-            gjf_filename = filename.replace('.log', '.gjf')
-            gjf_filepath = os.path.join(data_folder, gjf_filename)
-
             sterimol_data = {"L": None, "B_1": None, "B_5": None}
             axis_atoms = sterimol_config.get(n)
 
-            # Only calculate sterimol if config exists and .gjf exists
-            if axis_atoms and os.path.exists(gjf_filepath):
-                sterimol_data = calculate_sterimol(gjf_filepath, axis_atoms)
+            if axis_atoms:
+                elements, coordinates = extract_geometry_from_log(filepath)
+                if elements is not None and coordinates is not None:
+                    sterimol_data = calculate_sterimol(elements, coordinates, axis_atoms)
+                else:
+                    print(f"Warning: Could not extract geometry for Sterimol calculation from {filename}")
 
-            # Get dependent variable
             dependent_variable = data_map.get(n, None)
 
             # --- Organize Data Row ---
