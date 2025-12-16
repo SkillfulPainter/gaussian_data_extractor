@@ -102,12 +102,6 @@ def main():
     # ...
 ```
 
-*Optional:* If your system uses a different Anion or Solvent, update the energy constants at the top of the `main()` function:
-```python
-    anion_energy = -459.54813049
-    E_DME_SOLVENT = -308.71907112
-```
-
 ### Step 3: Run the Script
 Open your terminal or command prompt, navigate to the folder containing the python script, and run:
 

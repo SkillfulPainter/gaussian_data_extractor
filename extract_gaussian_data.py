@@ -485,7 +485,7 @@ def main():
     """
     Main function to process files, extract data, and generate CSV report.
     """
-    data_folder = r"/examples"
+    data_folder = r"D:\Research\GaussianData"
     output_file = 'results.csv'
 
     all_fitting_data = []
