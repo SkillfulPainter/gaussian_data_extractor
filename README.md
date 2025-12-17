@@ -3,23 +3,24 @@
 ## Overview
 This Python tool is designed to automate the extraction of quantum chemical descriptors from Gaussian calculation output files (`.log`) and perform subsequent multivariate statistical analysis. 
 
-It is specifically tailored for analyzing DFT calculations of small organic molecules, extracting physical organic descriptors, and performing stepwise linear regression to model experimental properties.
-* The current version only contains the data extractor part. The QSAR modeling part will be uploaded in the future.
+It is specifically tailored for analyzing DFT calculations of small organic molecules, extracting physical organic descriptors, and performing stepwise linear regression to model experimental properties. 
+
+It includes a fully functional Stepwise Backward Regression module that automatically builds predictive models based on the extracted descriptors.
 
 ## Key Features
 * **Batch Extraction:** Automatically processes multiple molecules based on numerical indices found in filenames.
 * **Robust Parsing:** Extracts SCF energies, orbital energies (HOMO/LUMO), Dipole moments, and Frequency data using regex.
 * **Descriptor Calculation:** Computes DFT-based reactivity indices (Hardness, Softness, Electrophilicity, etc.).
-* **Steric Analysis:** Calculates Sterimol parameters ($L, B_1, B_5$) using `morfeus` based on `.gjf` geometries.
-* **Complexation Energy:** Automatic calculation of binding energies ($\Delta E$) for salts and solvent-cation complexes.
-* **Statistical Modeling:** Performs automatic Backward Stepwise OLS Regression to identify significant descriptors correlated with experimental data.
+* **Steric Analysis:** Calculates Sterimol parameters ($L, B_1, B_5$) using `morfeus` based on molecule geometries.
+* **Data Preprocessing:** Automatically handles missing values, removes constant descriptor columns, and applies Z-score standardization to all features before regression to ensure scale invariance.
+* **Statistical Modeling:** Performs automatic Backward Elimination OLS Regression. It iteratively removes the least significant descriptors (p-value > 0.05) until all remaining variables are statistically significant. It also performs an initial Spearman correlation screening if the number of descriptors exceeds the sample size.
 
 ## Prerequisites
 
 Ensure you have Python installed along with the following libraries:
 
 ```bash
-pip install pandas statsmodels morfeus-py openpyxl
+pip install pandas statsmodels morfeus-py openpyxl matplotlib
 ```
 *Note: The script also uses standard libraries: `os`, `re`, `csv`.*
 
@@ -35,7 +36,7 @@ Place all files in a single directory. Replace `n` with the sample number (e.g.,
 | **Gaussian Output** | `n-**.log`     | Output log for the isolated cation. |
 
 ### 2. Configuration & Experimental Data (`data.xlsx`)
-You also need to provide an Excel file named **`data.xlsx`** in the same directory. This file serves two purposes: providing the experimental target variable (for regression) and configuration for steric calculations.
+You also need to provide an Excel file named **`data.xlsx`** in the same directory. This file serves two purposes: providing the experimental target variable (for regression) and configuration for Sterimol calculations.
 
 #### **Required Data Format**
 
@@ -88,7 +89,7 @@ Follow these steps to run the analysis:
 
 ### Step 1: Prepare Your Directory
 Create a folder (e.g., `D:\Research\GaussianData`) and ensure it contains:
-1.  All your `.log` and `.gjf` files named correctly (see Naming Convention).
+1.  All your `.log` files named correctly (see Naming Convention).
 2.  The `data.xlsx` file containing your experimental data and sterimol configs.
 
 ### Step 2: Configure the Script
@@ -126,6 +127,7 @@ After execution, two new files will be generated in your working directory:
 
 1.  **`results.csv`**: A comprehensive dataset containing every extracted descriptor for every molecule. This is your raw data for further analysis.
 2.  **`fitting_report.txt`**: The final statistical summary of the best regression model found, including R-squared, F-statistic, and coefficients.
+3. **`prediction_vs_actual.png`**: A scatter plot visualizing the correlation between Experimental (X-axis) and Predicted (Y-axis) values, displaying the final $R^2$ of the model.
 
 ## Troubleshooting
 

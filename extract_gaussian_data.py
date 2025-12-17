@@ -659,7 +659,7 @@ def main():
             break
 
         # Prepare data and add constant (intercept)
-        X_curr = X[curr_cols]
+        X_curr = X_scaled[curr_cols]
         X_with_const = sm.add_constant(X_curr)
 
         try:
